@@ -1,38 +1,43 @@
 import math
-from functools import lru_cache
+from pathlib import Path
+# from functools import lru_cache
 
 import numpy as np
 import pandas as pd
+from matplotlib import pyplot as plt
 import scipy
 from scipy.ndimage import gaussian_filter1d
 from scipy.interpolate import interp1d
 
-from src import config
+
+LINE_MAIN_COLOR = "#363649"
+LINE_COLORS = ["#16a9da", "#fe6361", "#ea8b06", "#9430b0", "#f7ca49", "#7d7059"]
+SAVE_KWARGS = {"format": "pdf", "dpi": 300, "bbox_inches": "tight", "pad_inches": 0.005}
+
+plt.rcParams['axes.axisbelow'] = True
+plt.rcParams["font.family"] = "DejaVu Serif"
+plt.rcParams["font.serif"] = "STIX"
+plt.rcParams["mathtext.fontset"] = "dejavuserif"
 
 
-def _load_plain_data(aperture_size):
-    path = f'data/strong_{str(aperture_size).replace(".", "_")}.csv'
-    return pd.DataFrame([
-        [float(v.strip()) for v in r[0][1:-2].split(',')]
-        for r in pd.read_csv(path).values], columns=config.WIND_SHIFTS)
-
-
-@lru_cache()
-def load_data(aperture_size):
-    try:
-        return _load_plain_data(aperture_size)
-    except IndexError:
-        path = f'data/strong_{str(aperture_size).replace(".", "_")}.csv'
-        df = pd.read_csv(path)
-        df.columns = [float(c) for c in df.columns]
-        return df
-
-
-def load_adhoc_data(aperture_size):
-    path = f'data/strong_adhoc_{str(aperture_size).replace(".", "_")}.csv'
+# @lru_cache()
+def load_data(channel_name, aperture_size):
+    file_name = "aperture_" + str(aperture_size).replace(".", "_") + '.csv'
+    path = Path('data') / channel_name / file_name
     df = pd.read_csv(path)
     df.columns = [float(c) for c in df.columns]
     return df
+
+
+def get_apertures(channel_name):
+    apertures = []
+    for file in (Path('data') / channel_name).glob('*.csv'):
+        if '.raw' in file.name or '.adhoc' in file.name:
+            continue
+        a = float(file.name[9:-4].replace('_', '.'))
+        apertures.append(a)
+    apertures.sort()
+    return apertures
 
 
 def hist(transmittance, bins=200, smooth=1, restore_scale=(200, 200), restore_shift=(0, 1)):

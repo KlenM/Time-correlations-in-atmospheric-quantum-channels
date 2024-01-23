@@ -5,7 +5,7 @@ from scipy.interpolate import interp1d
 from matplotlib import pyplot as plt
 from matplotlib.lines import Line2D
 
-from src import config, utils
+from src import utils
 
 
 def get_p_B(time_eta_df):
@@ -92,61 +92,100 @@ def smooth(x, y, smooth, num=100):
     return t, gaussian_filter1d(values, smooth)
 
 
-def plot():
-    theta_A1, theta_B1, theta_A2, theta_B2 = 0, np.pi / 8, np.pi / 4, 3 * np.pi / 8
-    nu = 3e-4
+class BellCalculator():
+    def __init__(self, **kwargs):
+        default_params = {
+            'channel_name': 'strong',
+            'aperture_radius': 0.2,
+            'channel_length_km': 50,
+            'wind_speed': 10,
+            'theta': (0, np.pi / 8, np.pi / 4, 3 * np.pi / 8),
+            'nu': 3e-4,
+            'eta_c': 1/2 * 0.85,
+            'eta_writing': 0.85,
+            'db_p_ms': 3,
+            '_xi': np.linspace(0.01, 1.2, 100),
+        }
+        self.params = {**default_params, **kwargs}
+    
+    def eta_d(self, length_km): 
+        return 10**(-0.1 * length_km / 10)
+    
+    def eta_delay(self, time, db_p_ms): 
+        return 10**(-db_p_ms * (time * 1000) / 10)
+        
+    def get(self, **kwargs):
+        params = {**self.params, **kwargs}
 
-    eta_c = 1/2 * 0.85
-    eta_d = 10**(-0.1 * 50 / 10)
-    eta_writing = 0.85
-    eta_delay = lambda t, db_p_ms=3: 10**(-db_p_ms * (t * 1000) / 10)
-
-    df = utils.load_data(aperture_size=0.2)
-    df *= eta_d
-    df *= pd.Series([(eta_writing if s else 1) * eta_delay(s / 10) for s in df.columns], df.columns)
-
-    eta_mean = df.mean()
-    eta2_mean = (df**2).mean()
-    etacorr_mean = (df.mul(df[0], axis='index')).mean()
-
-    _xi = np.linspace(0.01, 1.2, 100)
-
-    p_B = get_p_B(df)
-    p_0 = get_p_0(df)
-    p_1 = get_p_1(df)
-
-    max_B = [np.max([get_B(theta_A1, theta_B1, theta_A2, theta_B2, nu, xi, eta_c, df[0], df[t]) for xi in _xi])
-        for t in df.columns]
-    B_Bell = [ideal_B(p_B[t], p_0[t], p_1[t], eta_c, nu) for t in df.columns]
+        df = utils.load_data(params['channel_name'], params['aperture_radius'])
+        eta_d = self.eta_d(params['channel_length_km'])
+        eta_memory = lambda s: (1 if s == 0 else params['eta_writing']) * self.eta_delay(s / params['wind_speed'], params['db_p_ms'])
+        df *= eta_d * pd.Series([eta_memory(s) for s in df.columns], df.columns)
+    
+        eta_mean = df.mean()
+        eta2_mean = (df**2).mean()
+        etacorr_mean = (df.mul(df[0], axis='index')).mean()
+        p_B, p_0, p_1 = get_p_B(df), get_p_0(df), get_p_1(df)
+        max_B = [np.max([get_B(*params['theta'], params['nu'], xi, params['eta_c'], df[0], df[t]) for xi in params['_xi']])
+            for t in df.columns]
+        B_Bell = [ideal_B(p_B[t], p_0[t], p_1[t], params['eta_c'], params['nu']) for t in df.columns]
+        
+        return {'wind_shift': np.asarray(df.columns), 'max_B': np.asarray(max_B), 'B_Bell': np.asarray(B_Bell)}
 
 
-    dim_scale = 100
+class BellPlot():
+    def __init__(self, ax=None):
+        self.ax = ax or plt.subplots(1, 1, figsize=(4, 3))[1]
+        self.dim_scale = (100, 1)
+        self.ax.set_ylabel(r'Bell parameter $\mathcal{B}$')
+        self.ax.set_xlabel('Wind-driven shift $s$ (cm)')
+        self.line_color_id = 0
+        self.ax.axhline(y = 2, c='k', alpha=0.5, lw=0.5, antialiased=None, snap=True)
+        self.axin = None
+    
+    def plot(self, bell_data, smooth_value=1, pdc_kwargs=None, bell_kwargs=None, **kwargs):
+        scaled_x = self.dim_scale[0] * bell_data['wind_shift']
+        _pdc_kwargs = {'color': utils.LINE_COLORS[self.line_color_id], **kwargs, **(pdc_kwargs or {})}
+        self.ax.plot(*smooth(scaled_x, bell_data['max_B'], smooth_value), **_pdc_kwargs)
+        _bell_kwargs = {'color': utils.LINE_COLORS[self.line_color_id], **kwargs, **(bell_kwargs or {})}
+        self.ax.plot(*smooth(scaled_x, bell_data['B_Bell'], smooth_value), **_bell_kwargs)
+        self.line_color_id += 1
 
-    fig, ax = plt.subplots(1, 1, figsize=(4, 3))
-    plt.plot(*smooth(dim_scale * df.columns, max_B, 2), c=config.LINE_COLORS[0])
-    plt.plot(*smooth(dim_scale * df.columns, B_Bell, 2), c=config.LINE_COLORS[1], ls='--')
-    plt.ylabel(r'Bell parameter $\mathcal{B}$')
-    plt.xlabel('Wind-driven shift $s$ [cm]')
-    plt.ylim(*(np.asarray(plt.ylim()) * [1, 1]))
-    plt.xlim(0, 6)
-    plt.plot([dim_scale * df.columns[0], dim_scale * df.columns[-1]], [2, 2],
-            c='k', alpha=0.5, lw=0.5, antialiased=None, snap=True)
+    def _example(self, bell_calculator, time, xi_max=1.2):
+        params = bell_calculator.params
+        _xi = np.linspace(0, xi_max, 100)
+        data = utils.load_data(params['channel_name'], params['aperture_radius'])
+        return {'xi': _xi, 'B': [get_B(*params['theta'], params['nu'], xi, params['eta_c'], data[0], data[time]) for xi in _xi]}
+
+    def plot_example(self, bell_calculator, time, xi_max=1.2):
+        data = self._example(bell_calculator, time, xi_max=1.2)
+        axin = self.ax.inset_axes([0.62, 0.72, 0.35, 0.25])
+        self.axin = axin
+        axin.plot([data['xi'][0], data['xi'][-1]], [2, 2], c='k', alpha=0.5, lw=0.5, antialiased=None, snap=True)
+        axin.plot(data['xi'], data['B'], c=utils.LINE_MAIN_COLOR)
+        axin.scatter(data['xi'][np.argmax(data['B'])], np.max(data['B']), c='k', s=12, zorder=10)
+        axin.hlines(np.max(data['B']), 0, data['xi'][np.argmax(data['B'])], color='k', ls=':', lw=0.7)
+        axin.set_ylim(1, 2.8)
+        axin.set_xlim(0, 1)
+        axin.tick_params(axis='both', which='major', labelsize='x-small')
+        axin.set_xlabel(r'Squeezing parameter $\xi$', fontsize='x-small')
+        axin.set_ylabel('Bell\n parameter $\mathcal{B}$', fontsize='x-small')
+        axin.xaxis.set_label_coords(0.5, -0.33)
+        axin.text(-0.18, 2.35, r'$\mathcal{B}_\mathrm{m}$', fontsize='x-small')
+
+    def savefig(self, file_path, **kwargs):
+        fig = self.ax.get_figure()
+        fig.tight_layout()
+        kwargs = {**utils.SAVE_KWARGS, **kwargs}
+        fig.savefig(file_path, **kwargs)
 
 
-    axins = ax.inset_axes([0.22, 0.3, 0.41, 0.28])
-
-    axins.plot([_xi[0], _xi[-1]], [2, 2], c='k', alpha=0.5, lw=0.5, antialiased=None, snap=True)
-    time = 0.028
-    for a in [0.2]:
-        _B = [get_B(theta_A1, theta_B1, theta_A2, theta_B2, nu, xi, eta_c, df[0], df[time]) for xi in _xi]
-        axins.plot(_xi, _B, c=config.LINE_MAIN_COLOR)
-        axins.scatter(_xi[np.argmax(_B)], np.max(_B), c='k', s=12)
-        axins.hlines(np.max(_B), 0, _xi[np.argmax(_B)], color='k', ls=':', lw=0.7)
-        axins.set_ylim(1, 2.6)
-        axins.set_xlim(0, 1)
-    axins.set_xlabel(r'Squeezing parameter $\xi$', fontsize=9)
-    axins.set_ylabel('Bell\n parameter $\mathcal{B}$', fontsize=9)
-    axins.xaxis.set_label_coords(0.47, -0.44)
-    axins.text(-0.18, 2.35, r'$\mathcal{B}_\mathrm{m}$')
-
-    plt.savefig('plots/5_bell.pdf', **config.SAVE_KWARGS)
+class BellPlotTime(BellPlot):
+    def __init__(self, ax=None):
+        super().__init__(ax)
+        self.dim_scale = (1000, 1)
+        self.ax.set_xlabel('Time $\\tau$ (ms)')
+    
+    def plot(self, bell_data, wind_speed, smooth_value=1, **kwargs):
+        time = bell_data['wind_shift'] / wind_speed
+        super().plot({**bell_data, 'wind_shift': time}, smooth_value, **kwargs)
