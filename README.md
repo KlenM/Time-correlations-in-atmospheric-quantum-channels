@@ -1,5 +1,7 @@
-The dataset is contained in the `data` folder.
-Each file in the folder corresponds to different aperture radius.
+The datasets are located in the `data/{channel_name}` folders.
+There are two type extensions `*.raw.csv` and `*.csv`.
+These are the simulated raw data and the processed data in a more convenient format.
+Each file name in the folder corresponds to a different aperture radius.
 For example, the file `strong_0_02.csv` is the data for the aperture radius equal `0.02` m.
 The first row in the file contains the names of the columns with the `wind-driven shift` values (in metres).
 
@@ -15,8 +17,7 @@ Install the `cupy` package of the appropriate version to the installed `cuda` li
 You can check the version of your `cuda` library with the command `nvidia-smi`.
 E.g. for the `CUDA Version: 12.3` run `pip install cupy-cuda12x`.
 
-Then start the simulation and plotting with the commands:
+Then start the simulation with the command:
 ```
 python simulation.py
-python results.py
 ```
