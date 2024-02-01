@@ -98,7 +98,7 @@ class WitnessCoherencePlot:
     def __init__(self, dim_scale=(100, 100)):
         fig, ax = plt.subplots(1, 1, figsize=(4, 3))
         ax.set_xlabel(r"Spatial coherence radius $\rho_0$ (cm)")
-        ax.set_ylabel(r'Threshold wind-driven shift $s_\mathrm{th}$ (cm)')
+        ax.set_ylabel(r'Wind-driven shift threshold $s_\mathrm{th}$ (cm)')
         self.dim_scale = dim_scale
         self.fig = fig
         self.ax = ax

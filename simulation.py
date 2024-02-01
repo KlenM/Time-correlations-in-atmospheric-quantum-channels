@@ -69,6 +69,24 @@ CHANNELS = [
         )
     },
     {
+        "name": "strong",
+        "wind_speed": 10,
+        "times": [0., 0.0028, 0.0056, 0.0084, 0.0112, 0.014, 0.0168, 0.0196, 0.0224, 0.0252, 0.028],
+        "aperture_radiuses": [0.004, 0.006, 0.01, 0.02, 0.05, 0.1, 0.2, 0.3],
+        "iterations": 25000,
+        "save_step": 1000,
+        "channel": pyatm.Channel(
+            grid=pyatm.RectGrid(resolution=2**11, delta=0.0015),
+                source=pyatm.GaussianSource(wvl=808e-9, w0=0.08, F0=50e3),
+            path=pyatm.IdenticalPhaseScreensPath(
+                phase_screen=pyatm.SSPhaseScreen(
+                    model=pyatm.MVKModel(Cn2=2e-16, l0=1e-3, L0=80),
+                    f_grid=pyatm.RandLogPolarGrid(points=2**10, f_min=1 / 80 / 15, f_max=1 / 1e-3 * 2)
+                ), length=50e3, count=15),
+            pupil=pyatm.CirclePupil(radius=0.2)
+        )
+    },
+    {
         "name": "strong_x1_5",
         "wind_speed": 10,
         "times": [0., 0.0028, 0.0056, 0.0084, 0.0112, 0.014, 0.0168, 0.0196, 0.0224, 0.0252, 0.028],
