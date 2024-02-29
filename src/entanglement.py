@@ -60,8 +60,13 @@ class GaussianEntanglementPlot():
 
         kwargs = {'color': utils.LINE_COLORS[self.line_color_id], **kwargs}
         self.ax.plot(scaled_data, r_squeezing, label=channel_name, **kwargs)
-        fill_kwargs = fill_kwargs or {'alpha': 0.1}
-        self.ax.fill_between([*scaled_data, 0], 0, [*r_squeezing, 10], **fill_kwargs)
+        if fill_kwargs:
+            # matplotlib bugfix
+            fill_e_kwargs = {**fill_kwargs, 'edgecolor': fill_kwargs['color'], 'color': 'None'}
+            self.ax.fill_between([*scaled_data, 0], 0, [*r_squeezing, 10], **fill_e_kwargs)
+            fill_kwargs = {**fill_kwargs, 'hatch': None}
+            self.ax.fill_between([*scaled_data, 0], 0, [*r_squeezing, 10], **fill_kwargs)
+        
         self.line_color_id += 1
         if self.line_color_id >= len(utils.LINE_COLORS):
             self.line_color_id = 0
